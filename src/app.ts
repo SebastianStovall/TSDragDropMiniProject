@@ -3,6 +3,91 @@
 
 // class ProjectList   ------> reaches out to the <template id='project-LIST'></template> that holds the <section></section> tag. This is where ALL projects will be displayed/rendered
 // class ProjectInput  ------> reaches out to the <template id='project-INPUT></template> that holds the <form></form> to submit a new project. It handles logic for submitting and validating a new project through this form
+// class ProjectState  ------> manages global state when adding/editing/deleting projects
+// class Project       ------> defines the structure of a Project object
+
+
+
+// PROJECT CLASS -----------------------------------------------------------------------------------------------------------------------------------------------------//
+
+enum ProjectStatus { // !! USED FOR HANDLING WHAT LIST IT SHOULD BE RENDERED TO
+    Active,
+    Finished
+}
+
+class Project {
+    constructor(
+        public id: string,
+        public title: string,
+        public description: string,
+        public people: number,
+        public status: ProjectStatus) {     // !! USED FOR HANDLING WHAT LIST IT SHOULD BE RENDERED TO
+    }
+}
+
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+
+
+
+
+
+
+// APP STATE MANAGEMENT --------------------------------------------------------------------------------------------------------------------------------------------//
+
+type Listener = (items: Project[]) => void // define structure of a listener function (each listener function should take in an array of project objects, and return void)
+
+class ProjectState {   // this class will handle global state for our projects
+
+    private listeners: Listener[] = [] // an array of listener functions
+    private projects: Project[] = []  // if this were Redux, this would essentially act as your store, and the methods would be reducer actions
+    private static instance: ProjectState
+
+    private constructor() {
+
+    }
+
+    // make this a singleton class... we will only ever need one instance for state management since we want a SINGLE SOURCE OF TRUTH
+    static getInstance() {
+        if (this.instance) {
+            return this.instance
+        } else {
+            this.instance = new ProjectState()
+            return this.instance
+        }
+    }
+
+
+    // when calling projectState.addListener, it is both defining a listener that gets stored in the ProjectState but also updates
+    // assignedProjects variable inside of the ProjectList class to be what the listner function gets invoked with when its called in
+    // addProject with listenerFn(this.projects.slice()). The projects are then rendered with ProjectLists's renderProjects() method
+    addListener(listenerFn: Listener) {
+        this.listeners.push(listenerFn)
+    }
+
+    // this method will invoke on successful submission of a new project. It creates the project, then calls out to any listners (like the one in ProjectList class, to display the new list)
+    addProject(title: string, description: string, numOfPeople: number) {
+        const newProject = new Project(
+            Math.random().toString(),
+            title,
+            description,
+            numOfPeople,
+            ProjectStatus.Active  // by default, all newly created projects will have an active status
+        )
+        this.projects.push(newProject)
+        for (const listenerFn of this.listeners) {  // call all listener functions, or any methods that get called from listener function... such as ProjectList's renderProjects() method
+            listenerFn(this.projects.slice())
+        }
+    }
+}
+
+//                  by calling ProjectState.getInstance(), we are now guarenteed to be working with the exact same object at all times
+const projectState = ProjectState.getInstance()  // global constant that can be used anywhere in our application to manage our project state. All we need to do now is just talk to our projectState variable
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
 
 
 
@@ -16,18 +101,48 @@ class ProjectList {
     templateElement: HTMLTemplateElement  // the <template> tag we are reaching out to... ( <template/> used to hold client-side content that you don't want to be rendered when a page loads)
     hostElement: HTMLDivElement // the final output will eventually be rendered in the <div id="app"></div> tag
     element: HTMLElement // !! a HTMLSectionElement type is not a thing, so we use HTMLElment instead. BUT THIS IS REACHING OUT SPECFICALLY TO A <section></section> tag
+    assignedProjects: Project[]
 
     constructor(private type: 'active' | 'finished') {  // need to pass in which List you want rendered (either active projects or finished projects). This is used to determine the CSS of the list output
         this.templateElement = document.getElementById('project-list')! as HTMLTemplateElement // gives access to the <template id='project-list'></template> tag (must typecast to HTMLTemplateElement so TS knows your grabbing such an element. Otherwise TS just knows its a regular HTML element which might not have the properties its looking for)
         this.hostElement = document.getElementById('app')! as HTMLDivElement  // the element where we want the content to be eventually rendered in the HTML
+        this.assignedProjects = []
 
 
         const importedNode = document.importNode(this.templateElement.content, true) // !!! this is the imported HTML content of the templateElement (all the content rendered inside of <template></template> tag (including the tag itself) )
         this.element = importedNode.firstElementChild as HTMLElement  // this targets the firstElement of the <template></template> tag... which is the <section></section> tag
         this.element.id = `${this.type}-projects`  // apply the CSS depending on which type the list is
 
+
+        // hook up the listener so when a project gets created we can render the projects with renderProjects() method
+        projectState.addListener((projects: Project[]) => {
+
+            // only want to render projects that are relevant to this instance (if creating instance with 'active', only want to show active projects, else, only want to show 'finished' projects)
+            const filteredProjects = projects.filter((project) => {
+                if (this.type === 'active') {
+                    return project.status === ProjectStatus.Active  // if active list, only show active projects
+                } else {
+                    return project.status === ProjectStatus.Finished  // if finished list, only show finished projects
+                }
+            })
+
+            this.assignedProjects = filteredProjects // This listener is a function that takes an array of projects as its parameter and updates the this.assignedProjects property of the ProjectList instance with this array.
+            this.renderProjects()
+        })
+
         this.attach() // attaches our created element <section>[...]</section> into the dom
         this.renderContent()  // insert our content into the DOM once the <section></section> has been attached
+    }
+
+    // once the listener gets invoked, we reach out to the list we want it to be rendered, then we create a list item for the project and display it in our list
+    private renderProjects() {
+        const listEl = document.getElementById(`${this.type}-projects-list`)! as HTMLUListElement
+        listEl.innerHTML = '' // when we get a new project to render, first clear all projects, then build up the list again with all projects (avoids duplicating projects)
+        for(const projectItem of this.assignedProjects) {
+            const listItem = document.createElement("li")
+            listItem.textContent = projectItem.title
+            listEl.appendChild(listItem)
+        }
     }
 
     private renderContent() {
@@ -39,6 +154,10 @@ class ProjectList {
     private attach() {
         this.hostElement.insertAdjacentElement('beforeend', this.element);  // !!!!!! INSERT THE <section></section> THAT INCLUDES OUR PROJECT LIST INTO THE <div id="app"></div> SO WE CAN DISPLAY IT !!!!!! //
     }
+
+    // private addProject() {
+
+    // }
 }
 
 
@@ -193,6 +312,10 @@ class ProjectInput {
         if( Array.isArray(userInput) ) { // checks if you got a tuple back from userInput (valid input!)
             const [title, desc, people] = userInput
             console.log(title, desc, people)
+
+            // !!! manage the newly created project in state !!!
+            projectState.addProject(title, desc, people)
+
             this.clearInputs() // clear form on a successful submission
         }
 
