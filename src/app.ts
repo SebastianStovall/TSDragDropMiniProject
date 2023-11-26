@@ -1,16 +1,46 @@
 // this will be done with an OOP approach since were not using a framework like react
 
-// class ProjectList   ------> reaches out to the <template></template> that holds the <section> <header><ul> <section>. This is where ALL projects will be displayed/rendered
-// class ProjectInput  ------> reaches out to the <template></template> that holds the <form></form> to submit a new project. It handles logic for submitting and validating a new project through this form
+
+// class ProjectList   ------> reaches out to the <template id='project-LIST'></template> that holds the <section></section> tag. This is where ALL projects will be displayed/rendered
+// class ProjectInput  ------> reaches out to the <template id='project-INPUT></template> that holds the <form></form> to submit a new project. It handles logic for submitting and validating a new project through this form
 
 
 
 
 
 
+// DISPLAYING ALL PROJECTS (LIST) ----------------------------------------------------------------------------------------------------------------------------------- //
 
 
-// DISPLAYING ALL PROJECTS LIST ----------------------------------------------------------------------------------------------------------------------------------- //
+class ProjectList {
+    templateElement: HTMLTemplateElement  // the <template> tag we are reaching out to... ( <template/> used to hold client-side content that you don't want to be rendered when a page loads)
+    hostElement: HTMLDivElement // the final output will eventually be rendered in the <div id="app"></div> tag
+    element: HTMLElement // !! a HTMLSectionElement type is not a thing, so we use HTMLElment instead. BUT THIS IS REACHING OUT SPECFICALLY TO A <section></section> tag
+
+    constructor(private type: 'active' | 'finished') {  // need to pass in which List you want rendered (either active projects or finished projects). This is used to determine the CSS of the list output
+        this.templateElement = document.getElementById('project-list')! as HTMLTemplateElement // gives access to the <template id='project-list'></template> tag (must typecast to HTMLTemplateElement so TS knows your grabbing such an element. Otherwise TS just knows its a regular HTML element which might not have the properties its looking for)
+        this.hostElement = document.getElementById('app')! as HTMLDivElement  // the element where we want the content to be eventually rendered in the HTML
+
+
+        const importedNode = document.importNode(this.templateElement.content, true) // !!! this is the imported HTML content of the templateElement (all the content rendered inside of <template></template> tag (including the tag itself) )
+        this.element = importedNode.firstElementChild as HTMLElement  // this targets the firstElement of the <template></template> tag... which is the <section></section> tag
+        this.element.id = `${this.type}-projects`  // apply the CSS depending on which type the list is
+
+        this.attach() // attaches our created element <section>[...]</section> into the dom
+        this.renderContent()  // insert our content into the DOM once the <section></section> has been attached
+    }
+
+    private renderContent() {
+        const listId = `${this.type}-projects-list`
+        this.element.querySelector('ul')!.id = listId  // grabs the <ul></ul> tag in the <section></section> element and gives it an id so we can target it
+        this.element.querySelector('h2')!.textContent = this.type.toUpperCase() + ' PROJECTS'   // grabs the <h2></h2> tag in the <section></section> element and injects content into the tag
+    }
+
+    private attach() {
+        this.hostElement.insertAdjacentElement('beforeend', this.element);  // !!!!!! INSERT THE <section></section> THAT INCLUDES OUR PROJECT LIST INTO THE <div id="app"></div> SO WE CAN DISPLAY IT !!!!!! //
+    }
+}
+
 
 
 
@@ -86,15 +116,15 @@ function Autobind(_: any, _2: string, descriptor: PropertyDescriptor) {        /
 
 class ProjectInput {
     templateElement: HTMLTemplateElement  // <template> tag... (used to hold client-side content that you don't want to be rendered when a page loads)
-    hostElement: HTMLDivElement // output will eventually be rendered in the app <div>
+    hostElement: HTMLDivElement // output will eventually be rendered in the <div id="app"></div> tag
     element: HTMLFormElement // this is the <form></form> rendered in the <template></template>
     titleInputElement: HTMLInputElement                                                             // input tag on line 16 in index HTML
     descriptionInputElement: HTMLInputElement                                                       // textarea tag on line 20 in index HTML
     peopleInputElement: HTMLInputElement                                                            // input tag on line 24 in index HTML
 
     constructor() {
-        this.templateElement = document.getElementById('project-input')! as HTMLTemplateElement // gives access to the template that holds hostElement (must typecast to HTMLTemplateElement so TS knows your grabbing such an element. Otherwise TS just knows its a regular HTML element which might not have the properties its looking for)
-        this.hostElement = document.getElementById('app')! as HTMLDivElement  // the element where we want the content to be eventually rendered in the HTML
+        this.templateElement = document.getElementById('project-input')! as HTMLTemplateElement // gives access to the <template id='project-input'></template> tag (must typecast to HTMLTemplateElement so TS knows your grabbing such an element. Otherwise TS just knows its a regular HTML element which might not have the properties its looking for)
+        this.hostElement = document.getElementById('app')! as HTMLDivElement  // the <div id="app"></div> where we want the content to be eventually rendered in the HTML
 
         // this is the imported HTML content of the templateElement (node includes a HTML tag and its content)
         const importedNode = document.importNode(this.templateElement.content, true)
@@ -173,12 +203,20 @@ class ProjectInput {
     }
 
     private attach() {
-        this.hostElement.insertAdjacentElement('afterbegin', this.element);
+        this.hostElement.insertAdjacentElement('afterbegin', this.element);  // !!!!!! INSERT THE FORM INTO THE <div id="app"></div> INTO THE HTML SO WE CAN DISPLAY IT !!!!!! //
     }
 }
+
+
+
+//  ----------------------------------------------------------------------------------------------------------------------- //
+
+
+// INITIALIZING THE APP
 
 // creating an instance of this class will generate you the form for creating a new project
 const projectInputForm = new ProjectInput()
 
-
-//  ----------------------------------------------------------------------------------------------------------------------- //
+// generating these instances will create two empty project lists (one for active projects, and one for finished projects)
+const activeProjectList = new ProjectList('active')
+const finishedProjectList = new ProjectList('finished')
