@@ -8,7 +8,29 @@
 
 
 
+// DRAG & DROP UI -----------------------------------------------------------------------------------------------------------------------------------------------------//
+
+interface Draggable {
+    dragStartHandler(event: DragEvent): void  // DragEvent is a built in TS type
+    dragEndHandler(event: DragEvent): void
+}
+
+interface DragTarget {
+    dragOverHandler(event: DragEvent): void  // makes sure thing your dragging is actually draggable
+    dropHandler(event: DragEvent): void  // reacts to the drop that happens
+    dragLeaveHandler(event: DragEvent): void  // useful for visual feedback when dragging is happen
+}
+
+
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+
+
+
+
 // PROJECT CLASS -----------------------------------------------------------------------------------------------------------------------------------------------------//
+
 
 enum ProjectStatus { // !! USED FOR HANDLING WHAT LIST IT SHOULD BE RENDERED TO
     Active,
@@ -27,11 +49,6 @@ class Project {
 
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------------//
-
-
-
-
-
 
 
 
@@ -78,6 +95,21 @@ class ProjectState extends State<Project> {   // this class will handle global s
             ProjectStatus.Active  // by default, all newly created projects will have an active status
         )
         this.projects.push(newProject)
+        this.updateListeners()
+    }
+
+    // switches the status of a project to a new list (triggers when user drags to a new list)
+    moveProject(projectId: string, newStatus: ProjectStatus) {
+        const project = this.projects.find((project) => project.id === projectId)
+        if(project && project.status !== newStatus) {
+            project.status = newStatus
+            this.updateListeners()
+        }
+    }
+
+
+    // updates our listeners with new project data, which will cause our project list to 're-render' (not really...) with new data
+    private updateListeners() {
         for (const listenerFn of this.listeners) {  // call all listener functions, or any methods that get called from listener function... such as ProjectList's renderProjects() method
             listenerFn(this.projects.slice())
         }
@@ -92,9 +124,7 @@ const projectState = ProjectState.getInstance()  // global constant that can be 
 
 
 
-
-
-// Component Base Class  <---- refactors ProjectList and ProjectInput to be a single class witht the use of generics and inheritance
+// Component Base Class  <---- refactors ProjectList and ProjectInput to be a single class with the use of generics and inheritance
 
 // cannot instaniate this class due to abstract keyword
 abstract class Component<T extends HTMLElement, U extends HTMLElement> {
@@ -128,12 +158,63 @@ abstract class Component<T extends HTMLElement, U extends HTMLElement> {
 
 
 
+// PROJECT ITEM CLASS -------------------------------------------------------------------------------------------------------------------------------------------- //
+
+// responsible for rendering a single project item  ( instantiated in the ProjectList class )
+
+                                    // host element     // targeting element
+class ProjectItem extends Component<HTMLUListElement, HTMLLIElement> implements Draggable {  // WILL BE HOSTED/RENDERED IN THE <ul></ul> UNDER <template id="project-list">, ...BUT WILL BE BUILD FROM <template id="single-project">
+    private project: Project // project that this class is being called with. can use this to access info about the project and display it
+
+    constructor(hostId: string, project: Project) {  // takes in the hostId where you want it to be rendered, and an instance of a project object
+        super('single-project', hostId, false, project.id)
+        this.project = project
+
+        this.configure()
+        this.renderContent()
+    }
+
+    @Autobind
+    dragStartHandler(event: DragEvent): void {
+        event.dataTransfer!.setData('text/plain', this.project.id) // attaches data to the drag event
+        event.dataTransfer!.effectAllowed = 'move' // sets the cursor
+    }
+
+    dragEndHandler(_: DragEvent): void {
+        console.log("DRAG HAS ENDED")
+    }
+
+
+    configure() {
+                                // the type to execute this listener is a drag event 'dragstart'
+        this.element.addEventListener('dragstart', this.dragStartHandler)
+                                // the type to execute this listener is a drag event 'dragstart'
+        this.element.addEventListener('dragend', this.dragEndHandler)
+    }
+
+    // build the single project item detail content
+    renderContent(): void {
+        this.element.querySelector('h2')!.textContent = this.project.title
+        this.element.querySelector('h3')!.textContent = `${this.project.people.toString()} ${this.project.people.toString() === '1' ? ' person assigned' : ' people assigned'}`
+        this.element.querySelector('p')!.textContent = this.project.description
+    }
+}
+
+
+
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------- //
+
+
+
+
+
+
 
 
 
 // DISPLAYING ALL PROJECTS (LIST) ----------------------------------------------------------------------------------------------------------------------------------- //
 
-class ProjectList extends Component<HTMLDivElement, HTMLElement> {
+class ProjectList extends Component<HTMLDivElement, HTMLElement> implements DragTarget {
     assignedProjects: Project[]
 
     constructor(private type: 'active' | 'finished') {  // need to pass in which List you want rendered (either active projects or finished projects). This is used to determine the CSS of the list output
@@ -146,7 +227,37 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
         this.renderContent()  // insert our content into the DOM once the <section></section> has been attached
     }
 
+    @Autobind
+    dragOverHandler(event: DragEvent): void {  // used to indicate droppable areas when your dragging an item
+        if(event.dataTransfer && event.dataTransfer.types[0] === 'text/plain') { // if what you are dropping into has content of plain text...
+            event.preventDefault() // tells JS in teh browser that you want to allow a drop
+            const listEl = this.element.querySelector('ul')!
+            listEl.classList.add('droppable')
+        }
+
+    }
+
+    @Autobind
+    dropHandler(event: DragEvent): void {  // initiates when you let go of the drop
+        const projectId = event.dataTransfer!.getData('text/plain')  // get the data that you attatched to the drag event earlier
+
+        // get the project data that you are moving, and pass in the new status to whereever you moved it to
+        projectState.moveProject(projectId, this.type === 'active' ? ProjectStatus.Active : ProjectStatus.Finished)
+    }
+
+    @Autobind
+    dragLeaveHandler(_: DragEvent): void {
+        const listEl = this.element.querySelector('ul')!
+        listEl.classList.remove('droppable')
+    }
+
     configure() {
+
+        // set up the listeners for the drag events
+        this.element.addEventListener('dragover', this.dragOverHandler)
+        this.element.addEventListener('dragleave', this.dragLeaveHandler)
+        this.element.addEventListener('drop', this.dropHandler)
+
         // hook up the listener so when a project gets created we can render the projects with renderProjects() method
         projectState.addListener((projects: Project[]) => {
 
@@ -174,9 +285,14 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
         const listEl = document.getElementById(`${this.type}-projects-list`)! as HTMLUListElement
         listEl.innerHTML = '' // when we get a new project to render, first clear all projects, then build up the list again with all projects (avoids duplicating projects)
         for(const projectItem of this.assignedProjects) {
-            const listItem = document.createElement("li")
-            listItem.textContent = projectItem.title
-            listEl.appendChild(listItem)
+
+            // REFACTORED WITH ProjectItem class which responsible for displaying a single ProjectItems's details:
+            new ProjectItem(this.element.querySelector('ul')!.id, projectItem)  // this.element.querySelector('ul') = <ul></ul> under the <section></section> tag... this allows it to be rendered in the list
+
+            // BEFORE ProjectItem CLASS:
+            // const listItem = document.createElement("li")
+            // listItem.textContent = projectItem.title
+            // listEl.appendChild(listItem)
         }
     }
 }
